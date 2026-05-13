@@ -952,7 +952,7 @@ ${weatherBlock}
 
 contentは各2000文字程度。親しみやすく、わくわくする文章で。`;
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/claude", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
       });
@@ -987,7 +987,7 @@ ${summary}
 
 各カテゴリ3〜4件、実在する具体的な店名・場所名で。`;
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/claude", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
       });
@@ -1053,7 +1053,7 @@ ${summary}
 
 各プランspotsは4〜5件。キャッチーに、絵文字も使ってOK。`;
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/claude", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
       });
@@ -1161,7 +1161,7 @@ ${LANGUAGES[lang].aiName}で応答してください。
     setChatInput('');
     setChatLoading(true);
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/claude", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1551,25 +1551,25 @@ ${LANGUAGES[lang].aiName}で応答してください。
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-bold flex items-center gap-1.5" style={{ color: '#3D2530', textShadow: '0 1px 2px rgba(255,255,255,0.6)' }}>
                 {Math.round(progress) === 0 ? (
-                  <>
+                  <span key="start" className="flex items-center gap-1.5">
                     <Compass className="w-4 h-4" style={{ color: '#C77B8C' }} strokeWidth={2.2} />
                     {t('progress_start')}
-                  </>
+                  </span>
                 ) : Math.round(progress) >= 80 ? (
-                  <>
+                  <span key="complete" className="flex items-center gap-1.5">
                     <Star className="w-4 h-4 fill-current" style={{ color: '#C77B8C' }} strokeWidth={2} />
                     {t('progress_complete')}
-                  </>
+                  </span>
                 ) : Math.round(progress) >= 50 ? (
-                  <>
+                  <span key="almost" className="flex items-center gap-1.5">
                     <Smile className="w-4 h-4" style={{ color: '#C77B8C' }} strokeWidth={2.2} />
                     {t('progress_almost')}
-                  </>
+                  </span>
                 ) : (
-                  <>
+                  <span key="middle" className="flex items-center gap-1.5">
                     <Heart className="w-4 h-4" style={{ color: '#C77B8C' }} strokeWidth={2.2} />
                     {t('progress_label')} {Math.round(progress)}{t('progress_suffix')}
-                  </>
+                  </span>
                 )}
               </p>
               <p className="text-sm font-bold" style={{ color: '#C77B8C' }}>
@@ -2514,7 +2514,7 @@ ${LANGUAGES[lang].aiName}で応答してください。
 \`\`\`
 
 不明な項目は空文字または空配列で。`;
-                    const response = await fetch("https://api.anthropic.com/v1/messages", {
+                    const response = await fetch("/api/claude", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
