@@ -954,7 +954,7 @@ contentは各2000文字程度。親しみやすく、わくわくする文章で
     try {
       const response = await fetch("/api/claude", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
+        body: JSON.stringify({ model: "claude-sonnet-4-5-20250929", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
       });
       const data = await response.json();
       const text = data.content.map(i => i.text || "").join("\n");
@@ -989,7 +989,7 @@ ${summary}
     try {
       const response = await fetch("/api/claude", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
+        body: JSON.stringify({ model: "claude-sonnet-4-5-20250929", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
       });
       const data = await response.json();
       const text = data.content.map(i => i.text || "").join("\n");
@@ -1055,7 +1055,7 @@ ${summary}
     try {
       const response = await fetch("/api/claude", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
+        body: JSON.stringify({ model: "claude-sonnet-4-5-20250929", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
       });
       const data = await response.json();
       const text = data.content.map(i => i.text || "").join("\n");
@@ -1165,7 +1165,7 @@ ${LANGUAGES[lang].aiName}で応答してください。
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-5-20250929",
           max_tokens: 1500,
           system: buildChatSystemPrompt(),
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
@@ -2518,7 +2518,7 @@ ${LANGUAGES[lang].aiName}で応答してください。
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        model: "claude-sonnet-4-20250514",
+                        model: "claude-sonnet-4-5-20250929",
                         max_tokens: 1500,
                         system: buildChatSystemPrompt(),
                         messages: [
