@@ -762,12 +762,20 @@ export default function HolidayPlanner() {
       if (note) l += `(補足: ${note})`;
       return l;
     };
-    const dateStr = answers.startDate ? (
-      answers.isDayTrip || !answers.endDate || answers.startDate.getTime() === answers.endDate.getTime()
-        ? `${formatDateFull(answers.startDate)} 日帰り`
-        : `${formatDateFull(answers.startDate)} 〜 ${formatDateFull(answers.endDate)}`
-    ) : '未指定';
-    const destStr = answers.hasDestination === 'yes' ? (answers.destination || '未記入') : 'おまかせ';
+    // 日帰り/宿泊の表示(日付がなくても isDayTrip を反映する)
+    let dateStr;
+    if (answers.startDate) {
+      const isDay = answers.isDayTrip || !answers.endDate || answers.startDate.getTime() === answers.endDate.getTime();
+      dateStr = isDay
+        ? `${formatDateFull(answers.startDate)} 【日帰り(宿泊なし)】`
+        : `${formatDateFull(answers.startDate)} 〜 ${formatDateFull(answers.endDate)}`;
+    } else {
+      // 日付なし → isDayTrip フラグだけでも反映
+      if (answers.isDayTrip === true) dateStr = '日付未指定 【日帰り(宿泊なし)】';
+      else if (answers.isDayTrip === false) dateStr = '日付未指定(宿泊あり)';
+      else dateStr = '未指定';
+    }
+    const destStr = answers.hasDestination === 'yes' ? (answers.destination || '未記入') : '【おまかせ・指定なし】';
     return `${line('行き先', destStr, answers.destinationNote)}
 ${line('時期・期間', dateStr, answers.whenNote)}
 ${line('同行者', getOptJa(COMP_OPTS, answers.companions), answers.companionsNote)}
@@ -910,7 +918,24 @@ ${line('好きな雰囲気', getOptJa(LK_OPTS, answers.likes), answers.likesNote
       ? `\n【旅行日の状況(必ずプランに反映)】\n${weatherSection}上記を踏まえ、雨予報なら屋内中心、晴れなら屋外中心、混雑期なら早朝・分散など、現実に即したプランを組んでください。\n`
       : '';
 
-    const prompt = `あなたは経験豊富な旅行プランナーです。以下の条件をもとに、3つの異なるテーマでプランを提案してください。
+    // ユーザーの主要条件を動的に最重要ルールとして抽出(プロンプト冒頭に配置)
+    const criticalConstraints = [];
+    if (answers.isDayTrip === true) {
+      criticalConstraints.push('🚨 ユーザーは「日帰り」を希望しています。3プラン全て日帰りで構成してください。宿泊・1泊・温泉旅館に泊まる提案は絶対に禁止です。日帰りで楽しめる範囲のスポットだけで構成してください。');
+    } else if (answers.isDayTrip === false && answers.startDate && answers.endDate) {
+      const days = Math.round((answers.endDate.getTime() - answers.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      criticalConstraints.push(`🚨 ユーザーは${days - 1}泊${days}日を希望しています。この泊数を厳守してください。`);
+    }
+    if (answers.hasDestination !== 'yes' || !answers.destination) {
+      criticalConstraints.push('🚨 ユーザーは行き先を指定していません(おまかせ)。3プラン全てを同じ目的地にしないでください。出発地・移動手段・予算・興味から逆算し、3プランで異なる方向のエリアを提案してください。例: 出発地が岡山なら、Aプランは岡山県内、Bプランは兵庫西部、Cプランは香川方面、など現実的に散らす。');
+    } else if (answers.destination) {
+      criticalConstraints.push(`🚨 ユーザーの行き先指定は「${answers.destination}」です。3プラン全てこのエリア内で完結させてください。勝手に別の地域を提案しないでください。`);
+    }
+    const criticalBlock = criticalConstraints.length > 0
+      ? `\n\n══════════════════════════════════════\n【⛔ 最重要・絶対遵守(これを破ったプランは無効)】\n══════════════════════════════════════\n${criticalConstraints.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n══════════════════════════════════════\n`
+      : '';
+
+    const prompt = `${criticalBlock}あなたは経験豊富な旅行プランナーです。以下の条件をもとに、3つの異なるテーマでプランを提案してください。
 
 【出力言語】
 ${LANGUAGES[lang].aiName}で出力してください。タイトル、サマリー、本文、すべてこの言語で書いてください。施設名は日本の地名の場合、日本語のまま記載してください(検索しやすくするため)。
@@ -918,21 +943,17 @@ ${LANGUAGES[lang].aiName}で出力してください。タイトル、サマリ�
 【ユーザーの希望】
 ${summary}
 ${weatherBlock}
-【🚨 絶対遵守ルール(これを破ったプランは無効です)】
-1. ユーザーの希望に「日帰り」と書かれていたら、3プラン全て日帰りで構成すること。宿泊・1泊・温泉旅館の提案は一切禁止。
-2. ユーザーの希望に「1泊」「2泊」などの宿泊指定があれば、その泊数を厳守すること。
-3. 行き先が「おまかせ」の場合、3プラン全てを同じ目的地にしてはいけない。出発地・移動手段・予算・興味から逆算し、3プランで異なる方向性のエリアを提案すること(例: 出発地が広島なら、Aプランは島根方面、Bプランは山口方面、Cプランは岡山方面、など現実的な範囲で散らす)。
-4. 行き先が指定されている場合、3プラン全てその目的地・近隣エリア内で完結させること。勝手に別の地域を提案しない。
-5. 出発地から目的地までの移動時間が日帰りで現実的でない場合(片道3時間超など)、その旨を warnings に明記し、近場の代替を検討する。
-6. 移動手段が「車」なら駐車場情報、「電車」ならアクセス手段を必ず本文に含める。
-7. 同行者が「高齢者」「子連れ」等の場合、バリアフリー・休憩・無理のないペース配分を必ず反映する。
+【その他の遵守ルール】
+- 移動手段が「車」なら駐車場情報、「電車」ならアクセス手段を必ず本文に含める。
+- 同行者が「高齢者」「子連れ」等の場合、バリアフリー・休憩・無理のないペース配分を必ず反映する。
+- 出発地から目的地までの移動時間が日帰りで現実的でない場合(片道3時間超など)、その旨を warnings に明記し、近場の代替を検討する。
 
 【3つのプランのテーマ】
 - Aプラン「王道・定番」: 一番人気のスポットや有名どころを巡る、はずさない安心プラン
 - Bプラン「穴場・通好み」: 地元の人が行くようなディープなスポットや穴場を中心としたプラン
 - Cプラン「贅沢・特別感」: 少し予算を上げて、記念日や自分へのご褒美にしたい特別感のあるプラン
 
-【最重要ルール】
+【固有名詞のルール】
 プラン内に登場する全ての固有名詞(観光地、施設、店、レストラン、カフェ、ホテル、駅など)は必ず [[名前]] の形式で二重角括弧で囲んでください。
 ✅ 正: [[清水寺]]を訪れる
 ❌ 誤: 清水寺を訪れる
@@ -1021,39 +1042,37 @@ ${summary}
     setInstaError('');
     const summary = buildSummary();
 
-    // 通常プランの目的地を抽出(目的地ドリフト防止のため)
-    const lockedDestination = (() => {
-      if (!plans) return null;
-      // 通常プランAのタイトル・サマリーから目的地を推定するのではなく、
-      // ユーザー入力の destination を最優先(あれば)
-      if (answers.hasDestination === 'yes' && answers.destination) {
-        return answers.destination;
-      }
-      return null;
-    })();
-
-    const destLockBlock = lockedDestination
-      ? `\n【🚨 目的地厳守】\n通常プランと同じ目的地「${lockedDestination}」で構成すること。別の地域に変更してはいけない。\n`
-      : `\n【🚨 目的地ルール】\nユーザーの希望(出発地・移動手段・予算)から現実的な範囲内で目的地を選ぶこと。日帰り指定なら日帰り可能な範囲、宿泊指定ならその範囲で。\n`;
-
-    const dayTripBlock = answers.isDayTrip
-      ? `\n【🚨 日帰り厳守】\n3プラン全て日帰りで構成。宿泊・温泉旅館の提案は禁止。\n`
+    // 動的に最重要ルールを生成(通常プランと同じパターン)
+    const criticalConstraints = [];
+    if (answers.isDayTrip === true) {
+      criticalConstraints.push('🚨 ユーザーは「日帰り」を希望しています。3プラン全て日帰りで構成してください。宿泊・1泊・温泉旅館に泊まる提案は絶対に禁止です。');
+    } else if (answers.isDayTrip === false && answers.startDate && answers.endDate) {
+      const days = Math.round((answers.endDate.getTime() - answers.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      criticalConstraints.push(`🚨 ユーザーは${days - 1}泊${days}日を希望しています。この泊数を厳守してください。`);
+    }
+    if (answers.hasDestination === 'yes' && answers.destination) {
+      criticalConstraints.push(`🚨 目的地は「${answers.destination}」です。3プラン全てこのエリア内で完結させてください。別の地域(出発地周辺など)に変更してはいけません。`);
+    } else {
+      criticalConstraints.push('🚨 行き先未指定なので、出発地・予算・移動手段から現実的な範囲で目的地を選んでください。3プランを同じ目的地にしないでください。');
+    }
+    const criticalBlock = criticalConstraints.length > 0
+      ? `\n\n══════════════════════════════════════\n【⛔ 最重要・絶対遵守(これを破ったプランは無効)】\n══════════════════════════════════════\n${criticalConstraints.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n══════════════════════════════════════\n`
       : '';
 
-    const prompt = `あなたはSNS映えに詳しい旅行プランナーです。以下の条件で、写真映え・SNS映えに特化した3プランを提案してください。
+    const prompt = `${criticalBlock}あなたはSNS映えに詳しい旅行プランナーです。以下の条件で、写真映え・SNS映えに特化した3プランを提案してください。
 
 【出力言語】
 ${LANGUAGES[lang].aiName}で出力してください。施設名は日本の地名の場合、日本語のまま記載してください。
 
 【ユーザーの希望】
 ${summary}
-${destLockBlock}${dayTripBlock}
+
 【3プラン】
 - A: 王道映えプラン(誰もが知る撮影スポット中心)
 - B: 穴場映えプラン(まだ知られていないフォトジェニック)
 - C: 贅沢映えプラン(特別感ある絶景・体験)
 
-【最重要ルール】
+【その他のルール】
 - 固有名詞は必ず [[名前]] の形式で囲んでください。
 - 各プランのspotsは必ず3〜4件(多すぎるとトークンが切れます。3〜4件厳守)。
 - contentは1000〜1200字程度(超過しないこと)。
@@ -1270,9 +1289,50 @@ ${LANGUAGES[lang].aiName}で応答してください。
     }
   };
 
+  // ユーザーの全発言からキーワードを検出して、AIのJSONより優先する(多層防御)
+  // AIがJSONを間違えても、ユーザーの明示的な発言は必ず反映される
+  const detectUserIntent = () => {
+    // ユーザーの全発言を結合(role='user' のもの)
+    const userText = chatMessages
+      .filter(m => m.role === 'user')
+      .map(m => m.content)
+      .join(' ');
+
+    const intent = {};
+
+    // 日帰り検出(優先度: 後の発言を優先するため、宿泊系を先にチェックして上書き可能に)
+    const dayTripPatterns = /日帰り|日帰|その日のうち|一日だけ|1日だけ|当日中/;
+    const stayPatterns = /(\d)\s*泊|一泊|二泊|三泊|泊まり|宿泊|温泉旅館に泊|宿に泊/;
+    if (dayTripPatterns.test(userText)) intent.isDayTrip = true;
+    if (stayPatterns.test(userText)) intent.isDayTrip = false;
+    // 両方ある場合、後の発言を優先(最後にマッチしたもの)
+    if (dayTripPatterns.test(userText) && stayPatterns.test(userText)) {
+      const lastDayTrip = userText.search(/日帰り|日帰|その日のうち/);
+      const lastStay = userText.search(/泊|宿泊/);
+      // search は最初の一致を返すので、最後のマッチを取るために lastIndexOf 系で再計算
+      const dayMatches = [...userText.matchAll(/日帰り|日帰|その日のうち|一日だけ|1日だけ|当日中/g)];
+      const stayMatches = [...userText.matchAll(/(\d)\s*泊|一泊|二泊|三泊|泊まり|宿泊|温泉旅館に泊|宿に泊/g)];
+      const lastDayIdx = dayMatches.length > 0 ? dayMatches[dayMatches.length - 1].index : -1;
+      const lastStayIdx = stayMatches.length > 0 ? stayMatches[stayMatches.length - 1].index : -1;
+      intent.isDayTrip = lastDayIdx > lastStayIdx;
+    }
+
+    // 行先未定検出
+    const noDestPatterns = /おまかせ|お任せ|決めてない|決まってない|どこでもいい|未定|未決|まだ決め|決められない|おすすめは|どこがいい|どこがおすすめ/;
+    if (noDestPatterns.test(userText)) intent.hasDestination = 'no';
+
+    return intent;
+  };
+
   // チャットの answers を、既存の answers ステートに反映
   const applyChatAnswers = (chatAnswers) => {
     const merged = { ...emptyAnswers(), ...chatAnswers };
+
+    // 🛡 多層防御: ユーザー発言から直接検出した意図でAIのJSONを上書き
+    const userIntent = detectUserIntent();
+    if (userIntent.isDayTrip !== undefined) merged.isDayTrip = userIntent.isDayTrip;
+    if (userIntent.hasDestination !== undefined) merged.hasDestination = userIntent.hasDestination;
+
     // 日付文字列を Date オブジェクトに復元(Invalid Date は null に)
     const parseDate = (v) => {
       if (!v || typeof v !== 'string') return null;
