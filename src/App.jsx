@@ -212,6 +212,7 @@ const T = {
     mp_detail: '📖 プランの詳細を見る',
     err_msg: 'プラン生成中にエラーが発生しました。もう一度お試しください。',
     err_retry: '再試行',
+    insta_err_msg: '映え版プランの生成に失敗しました。もう一度お試しください。',
     photo_credit: 'Photo via Flickr',
     img_warning_q: '時期・期間',
     weather_title: '🌤️ 旅行日の情報',
@@ -227,7 +228,7 @@ const T = {
     insta_time: 'ベスト撮影時間',
     insta_angle: 'おすすめ構図',
     insta_tags: '推奨ハッシュタグ',
-    album_title: '✨ ODEKAKEアルバム',
+    album_title: 'ODEKAKEアルバム',
     album_sub: '行ってきた旅の思い出',
     album_empty: '保存したプランで「行ってきた」を記録すると、ここに思い出が残ります',
     album_visit_btn: '✓ この旅、行ってきた',
@@ -405,6 +406,7 @@ const T = {
     mp_detail: '📖 View Plan Details',
     err_msg: 'An error occurred while generating the plan. Please try again.',
     err_retry: 'Retry',
+    insta_err_msg: 'Failed to generate photo-worthy plans. Please try again.',
     photo_credit: 'Photo via Flickr',
     weather_title: '🌤️ Trip Day Info',
     weather_loading: 'Fetching weather...',
@@ -419,7 +421,7 @@ const T = {
     insta_time: 'Best Time',
     insta_angle: 'Suggested Angle',
     insta_tags: 'Hashtags',
-    album_title: '✨ ODEKAKE Album',
+    album_title: 'ODEKAKE Album',
     album_sub: 'Memories of trips you took',
     album_empty: 'Mark a saved plan as visited to record your memories here',
     album_visit_btn: '✓ Mark as Visited',
@@ -484,6 +486,7 @@ export default function HolidayPlanner() {
   // 映え版プラン
   const [instaPlans, setInstaPlans] = useState(null);
   const [instaLoading, setInstaLoading] = useState(false);
+  const [instaError, setInstaError] = useState('');
   const [showInsta, setShowInsta] = useState(false);
   // ODEKAKEアルバム
   const [albums, setAlbums] = useState([]);
@@ -915,6 +918,15 @@ ${LANGUAGES[lang].aiName}で出力してください。タイトル、サマリ�
 【ユーザーの希望】
 ${summary}
 ${weatherBlock}
+【🚨 絶対遵守ルール(これを破ったプランは無効です)】
+1. ユーザーの希望に「日帰り」と書かれていたら、3プラン全て日帰りで構成すること。宿泊・1泊・温泉旅館の提案は一切禁止。
+2. ユーザーの希望に「1泊」「2泊」などの宿泊指定があれば、その泊数を厳守すること。
+3. 行き先が「おまかせ」の場合、3プラン全てを同じ目的地にしてはいけない。出発地・移動手段・予算・興味から逆算し、3プランで異なる方向性のエリアを提案すること(例: 出発地が広島なら、Aプランは島根方面、Bプランは山口方面、Cプランは岡山方面、など現実的な範囲で散らす)。
+4. 行き先が指定されている場合、3プラン全てその目的地・近隣エリア内で完結させること。勝手に別の地域を提案しない。
+5. 出発地から目的地までの移動時間が日帰りで現実的でない場合(片道3時間超など)、その旨を warnings に明記し、近場の代替を検討する。
+6. 移動手段が「車」なら駐車場情報、「電車」ならアクセス手段を必ず本文に含める。
+7. 同行者が「高齢者」「子連れ」等の場合、バリアフリー・休憩・無理のないペース配分を必ず反映する。
+
 【3つのプランのテーマ】
 - Aプラン「王道・定番」: 一番人気のスポットや有名どころを巡る、はずさない安心プラン
 - Bプラン「穴場・通好み」: 地元の人が行くようなディープなスポットや穴場を中心としたプラン
@@ -1006,7 +1018,28 @@ ${summary}
       return;
     }
     setInstaLoading(true);
+    setInstaError('');
     const summary = buildSummary();
+
+    // 通常プランの目的地を抽出(目的地ドリフト防止のため)
+    const lockedDestination = (() => {
+      if (!plans) return null;
+      // 通常プランAのタイトル・サマリーから目的地を推定するのではなく、
+      // ユーザー入力の destination を最優先(あれば)
+      if (answers.hasDestination === 'yes' && answers.destination) {
+        return answers.destination;
+      }
+      return null;
+    })();
+
+    const destLockBlock = lockedDestination
+      ? `\n【🚨 目的地厳守】\n通常プランと同じ目的地「${lockedDestination}」で構成すること。別の地域に変更してはいけない。\n`
+      : `\n【🚨 目的地ルール】\nユーザーの希望(出発地・移動手段・予算)から現実的な範囲内で目的地を選ぶこと。日帰り指定なら日帰り可能な範囲、宿泊指定ならその範囲で。\n`;
+
+    const dayTripBlock = answers.isDayTrip
+      ? `\n【🚨 日帰り厳守】\n3プラン全て日帰りで構成。宿泊・温泉旅館の提案は禁止。\n`
+      : '';
+
     const prompt = `あなたはSNS映えに詳しい旅行プランナーです。以下の条件で、写真映え・SNS映えに特化した3プランを提案してください。
 
 【出力言語】
@@ -1014,22 +1047,24 @@ ${LANGUAGES[lang].aiName}で出力してください。施設名は日本の地�
 
 【ユーザーの希望】
 ${summary}
-
+${destLockBlock}${dayTripBlock}
 【3プラン】
 - A: 王道映えプラン(誰もが知る撮影スポット中心)
 - B: 穴場映えプラン(まだ知られていないフォトジェニック)
 - C: 贅沢映えプラン(特別感ある絶景・体験)
 
 【最重要ルール】
-固有名詞は必ず [[名前]] の形式で囲んでください。
+- 固有名詞は必ず [[名前]] の形式で囲んでください。
+- 各プランのspotsは必ず3〜4件(多すぎるとトークンが切れます。3〜4件厳守)。
+- contentは1000〜1200字程度(超過しないこと)。
 
 【映え情報(各スポットに必ず含める)】
-- photoScore: SNS映え度(★1〜5)、整数の星の数
-- bestTime: ベスト撮影時間(例:「朝7時頃の柔らかい光」「夕暮れ17時前後」)
-- angle: おすすめ構図(例:「下からあおって空を入れる」)
-- tags: 推奨ハッシュタグ(配列、3〜5個、#は付けない)
+- photoScore: SNS映え度(1〜5の整数)
+- bestTime: ベスト撮影時間(20字以内)
+- angle: おすすめ構図(20字以内)
+- tags: 推奨ハッシュタグ(配列、3個、#は付けない)
 
-【出力形式】必ず以下のJSON形式のみで出力してください。
+【出力形式】必ず以下のJSON形式のみで出力してください。前後に説明文・コードブロック記号は一切不要です。
 {
   "A": {
     "title": "プランのキャッチコピー(15字以内)",
@@ -1038,33 +1073,55 @@ ${summary}
     "spots": [
       {
         "name": "スポット名(固有名詞、[[]]は不要、表示時に自動付与)",
-        "description": "そのスポットの魅力(50字以内)",
+        "description": "そのスポットの魅力(40字以内)",
         "photoScore": 5,
         "bestTime": "ベスト撮影時間",
         "angle": "おすすめ構図",
         "tags": ["タグ1", "タグ2", "タグ3"]
       }
     ],
-    "content": "Markdown形式の本文(タイムスケジュール込み、1500字程度)。固有名詞は[[名前]]形式で囲む。"
+    "content": "Markdown形式の本文(タイムスケジュール込み、1000字程度)。固有名詞は[[名前]]形式で囲む。"
   },
   "B": { 同じ構造 },
   "C": { 同じ構造 }
-}
-
-各プランspotsは4〜5件。キャッチーに、絵文字も使ってOK。`;
+}`;
     try {
       const response = await fetch("/api/claude", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-5-20250929", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
       });
+      if (!response.ok) {
+        throw new Error(`API responded with status ${response.status}`);
+      }
       const data = await response.json();
+      if (!data.content || !Array.isArray(data.content)) {
+        throw new Error('Unexpected API response shape');
+      }
       const text = data.content.map(i => i.text || "").join("\n");
-      const clean = text.replace(/```json|```/g, "").trim();
-      setInstaPlans(JSON.parse(clean));
+      // JSON抽出: ```json ... ``` で囲まれていれば中身を、なければそのまま使う
+      let clean = text.trim();
+      const blockMatch = clean.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (blockMatch) clean = blockMatch[1].trim();
+      // JSON冒頭の{ から末尾の } までを抽出(前後にゴミがある場合の保険)
+      const firstBrace = clean.indexOf('{');
+      const lastBrace = clean.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        clean = clean.slice(firstBrace, lastBrace + 1);
+      }
+      const parsed = JSON.parse(clean);
+      // 最低限の構造チェック(A,B,C があり、各プランに spots がある)
+      if (!parsed.A || !parsed.B || !parsed.C) {
+        throw new Error('Missing A/B/C plans in response');
+      }
+      setInstaPlans(parsed);
       setShowInsta(true);
       setOpenPlan('A');
-    } catch (err) { console.error(err); }
-    finally { setInstaLoading(false); }
+    } catch (err) {
+      console.error('Insta plan generation error:', err);
+      setInstaError(t('insta_err_msg'));
+    } finally {
+      setInstaLoading(false);
+    }
   };
 
   // ===== チャットモード =====
@@ -1095,6 +1152,13 @@ ${LANGUAGES[lang].aiName}で応答してください。
 8. 好きな雰囲気
 
 すべて完璧に揃わなくても問題ありません。ユーザーが話しやすいトピックから自然に。
+
+【ユーザー発言の解釈ルール(厳守)】
+- 「日帰り」「日帰りで」「その日のうちに帰る」「一日だけ」等の発言があれば、必ず isDayTrip: true、endDate は startDate と同じ値にする
+- 「1泊」「2泊」「泊まりで」「宿泊」「温泉に泊まる」等の発言があれば、isDayTrip: false、endDate を適切に設定
+- 「行き先は決まってない」「おまかせ」「どこでもいい」「おすすめは?」「決めてない」等の発言があれば、hasDestination: "no"、destination: "" にする(勝手に行き先を推測しない)
+- ユーザーが明示していない条件は推測で埋めない。空文字または null を使う
+- 「日帰り」と「宿泊」の両方の発言があった場合は、より新しい(直近の)発言を優先する
 
 【プラン生成タイミング】
 情報が一定揃ったと判断した時、最後の応答の末尾に必ず以下のJSONブロックを含めてください(マークダウンのコードブロックで囲む):
@@ -1217,13 +1281,27 @@ ${LANGUAGES[lang].aiName}で応答してください。
     };
     if (typeof merged.startDate === 'string') merged.startDate = parseDate(merged.startDate);
     if (typeof merged.endDate === 'string') merged.endDate = parseDate(merged.endDate);
-    // 日帰り判定の補正
-    if (merged.startDate && !merged.endDate) merged.endDate = merged.startDate;
+    // 日帰り判定の補正(isDayTrip を最優先)
+    if (merged.isDayTrip === true && merged.startDate) {
+      // 明示的に日帰り → endDate は startDate と同じに強制
+      merged.endDate = merged.startDate;
+    } else if (merged.startDate && !merged.endDate && merged.isDayTrip !== false) {
+      // endDateが無くてisDayTripも未指定 → 日帰り扱い
+      merged.endDate = merged.startDate;
+      merged.isDayTrip = true;
+    }
     // 配列フィールドの保証
     if (!Array.isArray(merged.interests)) merged.interests = [];
-    // 行き先有無の補正
-    if (merged.destination && !merged.hasDestination) merged.hasDestination = 'yes';
-    if (!merged.destination && !merged.hasDestination) merged.hasDestination = 'no';
+    // 行き先有無の補正(明示的にnoが来ていれば尊重)
+    if (merged.hasDestination !== 'yes' && merged.hasDestination !== 'no') {
+      // AIが指定しなかった場合のみ destination の有無で推測
+      if (merged.destination) merged.hasDestination = 'yes';
+      else merged.hasDestination = 'no';
+    }
+    // hasDestination が "no" なら destination は空に強制(推測されたゴミを除去)
+    if (merged.hasDestination === 'no') {
+      merged.destination = '';
+    }
     setAnswers(merged);
     return merged;
   };
@@ -1996,7 +2074,8 @@ ${LANGUAGES[lang].aiName}で応答してください。
                       </button>
                       {isOpen && (
                         <div className="border-t p-4 space-y-4" style={{ borderColor: meta.bg }}>
-                          {pd.imageKeyword && (
+                          {/* 写真表示は一旦オフ(プラン本文の質に集中するため)。復活時は下記の{false &&}を{pd.imageKeyword &&}に戻す */}
+                          {false && pd.imageKeyword && (
                             <div className="rounded-xl overflow-hidden relative" style={{ aspectRatio: '2/1', backgroundColor: meta.bg }}>
                               <img src={getPhotoUrl(pd.imageKeyword)} alt={pd.title} className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />
                               <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent 0%, transparent 60%, rgba(0,0,0,0.3) 100%)' }}></div>
@@ -2110,6 +2189,16 @@ ${LANGUAGES[lang].aiName}で応答してください。
                   <div className="text-center py-3">
                     <div className="inline-block animate-spin"><Sparkles className="w-5 h-5" style={{ color: '#B888AD' }} /></div>
                     <p className="text-xs mt-1.5" style={{ color: '#8B6878' }}>{t('insta_loading')}</p>
+                  </div>
+                )}
+                {instaError && !instaLoading && (
+                  <div className="text-center py-3 px-4 rounded-xl" style={{ backgroundColor: 'rgba(232, 197, 221, 0.25)', border: '1px solid #E8C5DD' }}>
+                    <p className="text-xs mb-2" style={{ color: '#7A4A60' }}>{instaError}</p>
+                    <button onClick={() => { setInstaError(''); generateInstaPlans(); }}
+                      className="text-xs px-3 py-1.5 rounded-full font-medium"
+                      style={{ backgroundColor: '#C77B8C', color: 'white' }}>
+                      {t('err_retry')}
+                    </button>
                   </div>
                 )}
 
@@ -2231,7 +2320,8 @@ ${LANGUAGES[lang].aiName}で応答してください。
                           {t('mp_detail')}
                         </summary>
                         <div className="p-4 border-t space-y-4" style={{ borderColor: meta.bg }}>
-                          {fav.imageKeyword && (
+                          {/* 写真表示は一旦オフ。復活時は下記の{false &&}を{fav.imageKeyword &&}に戻す */}
+                          {false && fav.imageKeyword && (
                             <div className="rounded-xl overflow-hidden relative" style={{ aspectRatio: '2/1', backgroundColor: meta.bg }}>
                               <img src={getPhotoUrl(fav.imageKeyword)} alt={fav.title} className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />
                               <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent 0%, transparent 60%, rgba(0,0,0,0.3) 100%)' }}></div>
